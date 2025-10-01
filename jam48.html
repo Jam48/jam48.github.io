@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Uplifting Verse (WEB)</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      min-height: 100svh;
+      margin: 0;
+      background: #fafafa;
+      color: #222;
+    }
+    #verse {
+      width: 100%;
+      max-width: min(92vw, 700px);
+      text-align: center;
+      font-size: clamp(1rem, 1rem + 1.2vw, 1.6rem);
+      line-height: 1.6;
+      padding: clamp(1rem, 3vw, 2rem);
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+      -webkit-font-smoothing: antialiased;
+      overflow-wrap: anywhere;
+    }
+    #controls {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      width: 100%;
+      max-width: min(92vw, 700px);
+      margin-top: 0.8rem;
+    }
+    .btn {
+      font: inherit;
+      padding: 0.7rem 1rem;
+      border-radius: 999px;
+      border: 1px solid rgba(0,0,0,0.1);
+      background: #ffffff;
+      color: inherit;
+      cursor: pointer;
+      min-width: 6.5rem;
+      touch-action: manipulation;
+      transition: background 160ms ease, transform 80ms ease, border-color 160ms ease;
+    }
+    .btn:hover { background: #f3f5f7; }
+    .btn:active { transform: translateY(1px); }
+
+    #toast {
+      position: fixed;
+      left: 50%;
+      bottom: 2.5vh;
+      transform: translateX(-50%);
+      background: rgba(17, 22, 29, 0.92);
+      color: #e9eef3;
+      padding: 0.55rem 0.8rem;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 180ms ease;
+      max-width: 90vw;
+      text-align: center;
+    }
+    #toast.show { opacity: 1; }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-in { animation: fadeInUp 280ms ease; }
+    @media (prefers-color-scheme: dark) {
+      body {
+        background: #0b0f14;
+        color: #e9eef3;
+      }
+      #verse {
+        background: #11161d;
+        box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+      }
+      .btn {
+        background: #11161d;
+        border-color: rgba(255,255,255,0.08);
+      }
+      .btn:hover { background: #151b22; }
+    }
+
+    :root[data-theme="light"] body {
+      background: #fafafa;
+      color: #222;
+    }
+    :root[data-theme="light"] #verse {
+      background: #fff;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+    }
+    :root[data-theme="light"] .btn {
+      background: #ffffff;
+      border-color: rgba(0,0,0,0.1);
+    }
+    :root[data-theme="light"] .btn:hover { background: #f3f5f7; }
+
+    :root[data-theme="dark"] body {
+      background: #0b0f14;
+      color: #e9eef3;
+    }
+    :root[data-theme="dark"] #verse {
+      background: #11161d;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+    }
+    :root[data-theme="dark"] .btn {
+      background: #11161d;
+      border-color: rgba(255,255,255,0.08);
+    }
+    :root[data-theme="dark"] .btn:hover { background: #151b22; }
+  </style>
+</head>
+<body>
+  <div id="verse">Loading uplifting verse…</div>
+  <div id="controls" aria-label="Actions">
+    <button id="refreshBtn" class="btn" aria-label="Get a new verse">New verse</button>
+    <button id="shareBtn" class="btn" aria-label="Share this verse">Share</button>
+    <button id="copyBtn" class="btn" aria-label="Copy verse to clipboard">Copy</button>
+    <button id="themeBtn" class="btn" aria-label="Change theme">Theme: Auto</button>
+  </div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script>
+
+    const THEME_KEY = 'theme';
+    function applyTheme(mode) {
+      const root = document.documentElement;
+      if (mode === 'auto') {
+        root.removeAttribute('data-theme');
+      } else if (mode === 'light' || mode === 'dark') {
+        root.setAttribute('data-theme', mode);
+      }
+      updateThemeButton(mode);
+    }
+    function updateThemeButton(mode) {
+      const btn = document.getElementById('themeBtn');
+      if (btn) btn.textContent = `Theme: ${mode.charAt(0).toUpperCase()}${mode.slice(1)}`;
+    }
+    function cycleTheme() {
+      const current = localStorage.getItem(THEME_KEY) || 'auto';
+      const next = current === 'auto' ? 'light' : current === 'light' ? 'dark' : 'auto';
+      localStorage.setItem(THEME_KEY, next);
+      applyTheme(next);
+      showToast(`Theme: ${next.charAt(0).toUpperCase()}${next.slice(1)}`);
+    }
+    function initTheme() {
+      const saved = localStorage.getItem(THEME_KEY) || 'auto';
+      applyTheme(saved);
+    }
+
+    async function loadVerse() {
+      try {
+
+        const url = "https://biblebytopic.com/api/getrandompopularverse";
+        const cacheBuster = Date.now().toString();
+        const urlWithBuster = url + (url.includes('?') ? '&' : '?') + "_=" + cacheBuster;
+        const proxy = "https://api.allorigins.win/raw?url=" + encodeURIComponent(urlWithBuster) + "&nocache=" + cacheBuster;
+
+        const res = await fetch(proxy, { cache: 'no-store' });
+        if (!res.ok) throw new Error("Proxy fetch failed");
+        const data = await res.json();
+
+        const v = data.text[0];
+        const verseText = v["text-web"] || v["text-ulb"] || v["text-kjv"] || v["text"] || "Verse unavailable";
+
+        const el = document.getElementById("verse");
+        el.textContent = `${v.bookname} ${v.chapter}:${v.startingverse} — ${verseText}`;
+        el.classList.remove('animate-in');
+        void el.offsetWidth; 
+        el.classList.add('animate-in');
+      } catch (err) {
+        console.error(err);
+
+        const fallbacks = [
+          "Psalm 23:1 — The LORD is my shepherd; I shall not want.",
+          "Isaiah 41:10 — Fear not, for I am with you; be not dismayed, for I am your God.",
+          "Philippians 4:6 — In nothing be anxious... let your requests be made known to God.",
+          "John 14:27 — Peace I leave with you; my peace I give to you.",
+          "Romans 8:28 — All things work together for good for those who love God.",
+          "Matthew 11:28 — Come to me, all who labor and are heavy laden, and I will give you rest.",
+          "Joshua 1:9 — Be strong and courageous... the LORD your God is with you wherever you go.",
+        ];
+        const pick = fallbacks[Math.floor(Math.random() * fallbacks.length)];
+        const el = document.getElementById("verse");
+        el.textContent = pick;
+        el.classList.remove('animate-in');
+        void el.offsetWidth;
+        el.classList.add('animate-in');
+        showToast('Showing a fallback verse');
+      }
+    }
+
+    async function shareVerse() {
+      const text = document.getElementById('verse').textContent;
+      const shareData = { title: 'Uplifting Verse', text, url: location.href };
+      try {
+        if (navigator.share) {
+          await navigator.share(shareData);
+        } else {
+          await navigator.clipboard.writeText(text);
+          showToast('Copied verse to clipboard');
+        }
+      } catch (_) {
+
+      }
+    }
+
+    async function copyVerse() {
+      try {
+        await navigator.clipboard.writeText(document.getElementById('verse').textContent);
+        showToast('Copied verse to clipboard');
+      } catch (_) {
+        showToast('Could not copy — select and copy manually');
+      }
+    }
+
+    let toastTimer = null;
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+    }
+
+    document.getElementById('refreshBtn').addEventListener('click', loadVerse);
+    document.getElementById('shareBtn').addEventListener('click', shareVerse);
+    document.getElementById('copyBtn').addEventListener('click', copyVerse);
+    document.getElementById('themeBtn').addEventListener('click', cycleTheme);
+    initTheme();
+    loadVerse();
+  </script>
+</body>
+</html>
